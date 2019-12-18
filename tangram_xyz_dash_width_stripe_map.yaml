@@ -1,0 +1,613 @@
+global:
+    angle: 0.75
+    highlight:
+        color: [1,1,1,0.25]
+        width: 2px
+    grey:
+        color: [.5,.5,.5,0.25]
+        width: 2px
+    black:
+        color: [0,0,0,0.25]
+        width: 2px
+
+    # replaced by app JS, used to look-up feature props that may be nested
+    lookupFeatureProp: function(feature) { return null; }
+    lookupFeatureLabelProp: function(feature) { return null; }
+
+    # dyanmic feature coloring, using the currently defined "color mode"
+    # the `colorState` global holds settings that may be relevant to each mode (e.g. min/max, palette, etc.)
+    featureColorDynamic: |
+      function () {
+        try {
+          if (global.colorFunctions[global.colorMode]) {
+            if (global.colorFunctions[global.colorMode].useProperty) {
+              return global.colorFunctions[global.colorMode].color(
+                global.lookupFeatureProp(feature),
+                global.colorState
+              );
+            }
+            else {
+              return global.colorFunctions[global.colorMode].color(
+                feature,
+                global.colorState
+              );
+            }
+          }
+        }
+        catch(e) { } // fallthrough to default color on exception
+        return 'rgba(127, 127, 127, .5)';
+      }
+
+    # simple color by feature color property, or fallback to geometry type
+    featureColorDefault: |
+        function() {
+            var color;
+            if (feature.color) {
+                color = feature.color
+            }
+            else if ($geometry === 'point') {
+              color = [1, 0, 0, 0.5];
+            }
+            else if ($geometry === 'line') {
+              color = [1, 0, 0, 0.3];
+            }
+            else if ($geometry === 'polygon') {
+              color = [0.614, 0.702, 0.740, 0.35];
+            }
+            return color;
+        }
+
+    # optionally hide feature values that are above or below the current filter range
+    featureFilterOutliers: |
+        function() {
+          if (global.colorState.featurePropHideOutliers && global.colorFunctions[global.colorMode]) {
+            if (global.colorFunctions[global.colorMode].useProperty) {
+              var value = global.colorState.colorHelpers.parseNumber(global.lookupFeatureProp(feature));
+              if (value < global.colorState.featurePropMinFilter ||
+                  value > global.colorState.featurePropMaxFilter+1) {
+                return false;
+              }
+            }
+          }
+          return true;
+        }
+
+    # optionally filter by specific property/value combination
+    featureFilterSelectedValue: |
+        function() {
+          if (global.colorState.featurePropStack != null && global.colorState.featurePropValue != null) {
+            var value = global.lookupFeatureProp(feature);
+            if (value !== global.colorState.featurePropValue) {
+              return false;
+            }
+          }
+          return true;
+        }
+
+    # used for dynamic text_source on feature labels
+    featureLabelText: |
+        function() {
+          return global.lookupFeatureLabelProp(feature);
+        }
+
+# sources:
+#     _xyzspace: # this source is created at run-time based on XYZ space
+
+import:
+    - https://sensescape.github.io/xyz-stripes/scene.yaml
+sources:
+    _xyzspace:
+        url: https://xyz.api.here.com/hub/spaces/cacVJZ1K/tile/web/{z}_{x}_{y}
+        type: GeoJSON
+        url_params: 
+            access_token: AVoxWfIDYgZOr4zOaUV3urg
+            # tags: YOUR_TAG
+            # limit: 50000 # 
+            clip: true
+    _census:
+        url: https://xyz.api.here.com/hub/spaces/oWmXpELu/tile/web/{z}_{x}_{y}
+        type: GeoJSON
+        url_params: 
+            access_token: AVoxWfIDYgZOr4zOaUV3urg
+            # tags: YOUR_TAG
+            # limit: 50000 # 
+            clip: true
+
+
+styles:
+    _points:
+        base: points
+        blend: overlay
+        blend_order: 0
+    _text:
+        base: text
+        blend: overlay
+        blend_order: 11
+    _lines:
+        base: lines
+        blend: overlay
+        blend_order: 0
+    _lines_low:
+        base: lines
+        blend: inlay
+        blend_order: 2
+    _polygons_inlay:
+        base: polygons
+        blend: inlay
+        blend_order: 0
+    _polygons_overlay:
+        base: polygons
+        blend: overlay
+        blend_order: 1
+    dash-large:
+        base: polygons
+        mix: [functions-zoom, polygons-diagonal-dash]
+        blend: inlay
+        shaders:
+            defines:
+                ZOOM_START: 12.
+                ZOOM_END: 18.
+                ZOOM_IN: .0
+                ZOOM_OUT: 1.
+
+                DASH_SCALE: 7.
+                DASH_SIZE: 0.25
+                DASH_COLOR: vec3(1.00,1.00,1.00)
+                DASH_TILE_STYLE: tile
+                DASH_TYPE: fill
+    dash-medium:
+        base: polygons
+        mix: [functions-zoom, polygons-diagonal-dash]
+        blend: inlay
+        shaders:
+            defines:
+                ZOOM_START: 12.
+                ZOOM_END: 18.
+                ZOOM_IN: .0
+                ZOOM_OUT: 1.
+
+                DASH_SCALE: 7.
+                DASH_SIZE: 0.75
+                DASH_COLOR: vec3(1.00,1.00,1.00)
+                DASH_TILE_STYLE: tile
+                DASH_TYPE: fill
+    dash-small:
+        base: polygons
+        mix: [functions-zoom, polygons-diagonal-dash]
+        blend: inlay
+        shaders:
+            defines:
+                ZOOM_START: 12.
+                ZOOM_END: 18.
+                ZOOM_IN: .0
+                ZOOM_OUT: 1.
+
+                DASH_SCALE: 7.
+                DASH_SIZE: 0.975
+                DASH_COLOR: vec3(1.00,1.00,1.00)
+                DASH_TILE_STYLE: tile
+                DASH_TYPE: fill
+    polygons-diagonal-dash:
+        ui:
+            shaders:
+                defines:
+                    DASH_SCALE:
+                        type: number
+                        label: Scale
+                        range: 
+                            min: 1.
+                            max: 1000.
+                            step: 1.
+                    DASH_SIZE:
+                        type: number
+                        label: Alpha
+                        range: 
+                            min: 0.
+                            max: 1.
+                            step: 0.01
+                    STRIPES_ALPHA:
+                        type: number
+                        label: Alpha
+                        range: 
+                            min: 0.
+                            max: 1.
+                            step: 0.01
+                    DASH_COLOR: 
+                        type: color
+                        label: Color
+                    DASH_BACKGROUND_COLOR: 
+                        type: color
+                        label: 'Background color'
+                    DASH_TYPE: 
+                        type: dropdownArray
+                        label: Type
+                        values: ['fill', 'stroke']
+                    DASH_TILE_STYLE: 
+                        type: dropdownArray
+                        label: 'Tile type'
+                        values: ['tile', 'brick']
+        base: polygons
+        mix: [block, space-tile, tiling-brick, tiling-tile, shapes-type]
+        shaders:
+            defines:
+                DASH_COLOR: color.rgb*.5
+                DASH_BACKGROUND_COLOR: color.rgb
+                DASH_SCALE: 10.
+                DASH_SIZE: 0.9
+                DASH_TYPE: fill
+                DASH_TILE_STYLE: tile
+            blocks:
+                global: |
+                    float dashDF(vec2 st) {
+                        return min(cos((st.x-st.y)*PI),-cos((st.x+st.y+.5)*PI*.6666)*5.);
+                    }
+                color: |
+                    color.rgb = mix(DASH_BACKGROUND_COLOR, 
+                                    DASH_COLOR, 
+                                    DASH_TYPE( DASH_SIZE, dashDF(DASH_TILE_STYLE(getTileCoords()*DASH_SCALE,3.))) );
+    space-tile:
+        shaders:
+            blocks:
+                global: |
+                    // Variant to be add to both vertex and fragments shaders
+                    varying vec3 v_pos;
+                    //
+                    // Get the coordinates in tile space
+                    // ================================
+                    vec2 getTileCoords() {
+                        return fract(v_pos.xy);
+                    }
+                position: |
+                    // Normalize the attribute position of a vertex
+                    v_pos = modelPosition().xyz;
+
+    tiling-brick:
+        shaders:
+            blocks:
+                global: |
+                    vec2 brick (vec2 st, float zoom) {
+                        st *= zoom;
+                        // Here is where the offset is happening
+                        st.x += step(1., mod(st.y,2.0)) * 0.5;
+                        return fract(st);
+                    }
+
+    tiling-tile:
+        shaders:
+            blocks:
+                global: |
+                    // Repeats a coordinate space (st) in diferent tiles
+                    // ================================
+                    vec2 tile (vec2 st, float zoom) {
+                        st *= zoom;
+                        return fract(st);
+                    }
+    shapes-type:
+        mix: [functions-aastep]
+        shaders:
+            defines:
+                STROKE: 0.15
+            blocks:
+                global: |
+                    float fill (in float size, in float x) {
+                        return 1.-aastep(size, x);
+                    }
+                    float stroke (in float size, in float x) {
+                        return aastep(size, x+STROKE) - aastep(size, x);
+                    }
+    block:
+        shaders:
+            defines:
+                ADD: '+'
+                SUBTRACT: '-'
+                MULTIPLY: '*'
+                PI: 3.1415926535897932384626433832795
+                TWO_PI: 6.2831853071795864769252867665590
+                HALF_PI: 1.5707963267948966192313216916398
+                QUATER_PI: .785398163
+                EPSILON: 0.0000001
+                deg2rad(d): (((d)*3.1415926535897932384626433832795)/180.0)
+                rad2deg(d): (((d)*180.0)/3.1415926535897932384626433832795)
+
+    functions-zoom:
+        mix: [functions-easing]
+        shaders:
+            defines:
+                ZOOM_START: 14.
+                ZOOM_END: 20.
+                ZOOM_MAX: max(ZOOM_START, ZOOM_END)
+                ZOOM_FNC: linear
+                ZOOM_IN: 0.0
+                ZOOM_OUT: 1.0
+            blocks:
+                global: |
+                    float zoom() {
+                        return mix( ZOOM_IN, 
+                                    ZOOM_OUT, 
+                                    clamp( smoothstep(  ZOOM_START/ZOOM_MAX, 
+                                                        ZOOM_END/ZOOM_MAX, 
+                                                        max(u_map_position.z/ZOOM_MAX, 0.)), 0., 1.) );
+                    }
+                    float zoomEase() {
+                        return mix( ZOOM_IN, 
+                                    ZOOM_OUT, 
+                                    ZOOM_FNC( (u_map_position.z-ZOOM_START)/(ZOOM_END-ZOOM_START) ) );
+                    }
+
+    functions-easing:
+        shaders:
+            defines:
+                PI: 3.1415926535897932384626433832795
+                HALF_PI: 1.5707963267948966192313216916398
+            blocks:
+                global: |
+                    float linear (in float t) {
+                        return t;
+                    }
+                    float exponentialIn (in float t) {
+                        return t == 0.0 ? t : pow(2.0, 10.0 * (t - 1.0));
+                    }
+                    float exponentialOut (in float t) {
+                        return t == 1.0 ? t : 1.0 - pow(2.0, -10.0 * t);
+                    }
+                    float exponentialInOut (in float t) {
+                        return t == 0.0 || t == 1.0
+                        ? t
+                        : t < 0.5
+                            ? +0.5 * pow(2.0, (20.0 * t) - 10.0)
+                            : -0.5 * pow(2.0, 10.0 - (t * 20.0)) + 1.0;
+                    }
+                    float sineIn (in float t) {
+                        return sin((t - 1.0) * HALF_PI) + 1.0;
+                    }
+                    float sineOut (in float t) {
+                        return sin(t * HALF_PI);
+                    }
+                    float sineInOut (in float t) {
+                        return -0.5 * (cos(PI * t) - 1.0);
+                    }
+                    float qinticIn (in float t) {
+                        return pow(t, 5.0);
+                    }
+                    float qinticOut (in float t) {
+                        return 1.0 - (pow(t - 1.0, 5.0));
+                    }
+                    float qinticInOut (in float t) {
+                        return t < 0.5
+                            ? +16.0 * pow(t, 5.0)
+                            : -0.5 * pow(2.0 * t - 2.0, 5.0) + 1.0;
+                    }
+                    float quarticIn (in float t) {
+                        return pow(t, 4.0);
+                    }
+                    float quarticOut (in float t) {
+                        return pow(t - 1.0, 3.0) * (1.0 - t) + 1.0;
+                    }
+                    float quarticInOut (in float t) {
+                        return t < 0.5
+                            ? +8.0 * pow(t, 4.0)
+                            : -8.0 * pow(t - 1.0, 4.0) + 1.0;
+                    }
+                    float quadraticInOut (in float t) {
+                        float p = 2.0 * t * t;
+                        return t < 0.5 ? p : -p + (4.0 * t) - 1.0;
+                    }
+                    float quadraticIn (in float t) {
+                        return t * t;
+                    }
+                    float quadraticOut (in float t) {
+                        return -t * (t - 2.0);
+                    }
+                    float cubicIn (in float t) {
+                        return t * t * t;
+                    }
+                    float cubicOut (in float t) {
+                        float f = t - 1.0;
+                        return f * f * f + 1.0;
+                    }
+                    float cubicInOut (in float t) {
+                        return t < 0.5
+                            ? 4.0 * t * t * t
+                            : 0.5 * pow(2.0 * t - 2.0, 3.0) + 1.0;
+                    }
+                    float elasticIn (in float t) {
+                        return sin(13.0 * t * HALF_PI) * pow(2.0, 10.0 * (t - 1.0));
+                    }
+                    float elasticOut (in float t) {
+                        return sin(-13.0 * (t + 1.0) * HALF_PI) * pow(2.0, -10.0 * t) + 1.0;
+                    }
+                    float elasticInOut (in float t) {
+                        return t < 0.5
+                            ? 0.5 * sin(+13.0 * HALF_PI * 2.0 * t) * pow(2.0, 10.0 * (2.0 * t - 1.0))
+                            : 0.5 * sin(-13.0 * HALF_PI * ((2.0 * t - 1.0) + 1.0)) * pow(2.0, -10.0 * (2.0 * t - 1.0)) + 1.0;
+                    }
+                    float circularIn (in float t) {
+                        return 1.0 - sqrt(1.0 - t * t);
+                    }
+                    float circularOut (in float t) {
+                        return sqrt((2.0 - t) * t);
+                    }
+                    float circularInOut (in float t) {
+                        return t < 0.5
+                            ? 0.5 * (1.0 - sqrt(1.0 - 4.0 * t * t))
+                            : 0.5 * (sqrt((3.0 - 2.0 * t) * (2.0 * t - 1.0)) + 1.0);
+                    }
+                    float bounceOut (in float t) {
+                        const float a = 4.0 / 11.0;
+                        const float b = 8.0 / 11.0;
+                        const float c = 9.0 / 10.0;
+                        const float ca = 4356.0 / 361.0;
+                        const float cb = 35442.0 / 1805.0;
+                        const float cc = 16061.0 / 1805.0;
+                        float t2 = t * t;
+                        return t < a
+                        ? 7.5625 * t2
+                        : t < b
+                            ? 9.075 * t2 - 9.9 * t + 3.4
+                            : t < c
+                                ? ca * t2 - cb * t + cc
+                                : 10.8 * t * t - 20.52 * t + 10.72;
+                    }
+                    float bounceIn (in float t) {
+                        return 1.0 - bounceOut(1.0 - t);
+                    }
+                    float bounceInOut (in float t) {
+                        return t < 0.5
+                        ? 0.5 * (1.0 - bounceOut(1.0 - t * 2.0))
+                        : 0.5 * bounceOut(t * 2.0 - 1.0) + 0.5;
+                    }
+                    float backIn (in float t) {
+                        return pow(t, 3.0) - t * sin(t * PI);
+                    }
+                    float backOut (in float t) {
+                        float f = 1.0 - t;
+                        return 1.0 - (pow(f, 3.0) - f * sin(f * PI));
+                    }
+                    float backInOut (in float t) {
+                        float f = t < 0.5
+                        ? 2.0 * t
+                        : 1.0 - (2.0 * t - 1.0);
+                        float g = pow(f, 3.0) - f * sin(f * PI);
+                        return t < 0.5
+                        ? 0.5 * g
+                        : 0.5 * (1.0 - g) + 0.5;
+                    }
+
+    functions-aastep:
+        shaders:
+            extensions: OES_standard_derivatives
+            blocks:
+                global: |
+                    // AntiAliased Step function
+                    //=============================
+                    float aastep(float threshold, float value) {
+                        #ifdef TANGRAM_FRAGMENT_SHADER
+                            #ifdef TANGRAM_EXTENSION_OES_standard_derivatives
+                                float afwidth = length(vec2(dFdx(value), dFdy(value))) * 0.70710678118654757;
+                                return smoothstep(threshold-afwidth, threshold+afwidth, value);
+                            #else
+                                return step(threshold, value);
+                            #endif
+                        #else
+                            return step(threshold, value);
+                        #endif
+                    }
+
+layers:
+    water:
+        draw:
+
+            polygons:
+                order: 1000
+    landuse:
+        enabled: false
+        data: { source: mapzen }
+        draw:
+            polygons:
+                order: global.feature_order
+                visible: false
+            lines:
+                order: global.feature_order
+                visible: false
+        # tier1:
+        national_park:
+            filter:
+                all:
+                    - kind: [national_park, battlefield, protected_area]
+                any:
+                    - not: { operator: [ "United States Forest Service" ] }
+                    - protect_class: ['2','3','5']
+            draw:
+                polygons:
+                    style: stripes-green-angle
+                    color: [1.000,0.000,0.000]
+                    visible: true
+            us_national_park:
+                # yosemite national park, death valley national park, grand canyon national park
+                filter:
+                    any:
+                        - operator: [ "United States National Park Service" ]
+                        - protect_class: ['2','3','5']
+                draw:
+                    polygons:
+                        style: stripes-green-angle
+                        color: [1.000,0.000,0.000]
+                        visible: true
+    _xyz_width:
+        # enabled: false
+        # filter:
+        #   all:
+        #     - $geometry: polygon
+        #     - global.featureFilterOutliers
+        #     - global.featureFilterSelectedValue
+        data: { source: _census }
+        _outlines:
+            filter: {$zoom: {min: 7}}
+            # enabled: false
+            draw:
+                _lines:
+                    color: [.5, .5, .5, 0.1]
+                    width: 1px
+                    order: 2000
+        medium:
+            filter:
+                RNETMIG2018: {max: -2 }
+            draw:
+                dash-medium:
+                    interactive: true
+                    # color: |
+                    #     function(){
+                    #         var pop = feature.POPESTIMATE2018
+                    #         ratio = (pop / 11000000) * 2
+                    #         console.log(ratio)
+                    #         return [1,0,0,ratio]
+                    #     }
+                    # color: [1,0,0,op.25
+                    color: global.featureColorDefault
+                    width: 2px
+                    order: 1000
+                text:
+                  # visible: false # updated by JS app at run-time
+                  text_source: RNETMIG2018
+                  # unique repeat group per feature, to avoid culling of labels with same values
+                  # repeat_group: function() { return $id }
+                  # repeat_distance: 700px # allow polygon labels to repeat over a longish distance
+                  font: global.featureLabelFont # set by the basemap
+                  # size: 12px
+                  # fill: white
+        large:
+            filter:
+                RNETMIG2018: {min: -2, max: 2 }
+            draw:
+                dash-large:
+                    interactive: true
+                    # color: |
+                    #     function(){
+                    #         var pop = feature.POPESTIMATE2018
+                    #         ratio = (pop / 11000000) * 2
+                    #         console.log(ratio)
+                    #         return [1,0,0,ratio]
+                    #     }
+                    # color: [1,0,0,op.25
+                    color: global.featureColorDefault
+                    width: 2px
+                    order: 1000
+
+        small:
+            filter:
+                RNETMIG2018: {min: 2}
+            draw:
+                dash-small:
+                    interactive: true
+                    # color: |
+                    #     function(){
+                    #         var pop = feature.POPESTIMATE2018
+                    #         // var pop = feature.NETMIG2018
+                    #         ratio = (pop / 11000000) * 2
+                    #         console.log(ratio)
+                    #         return [1,0,0,ratio]
+                    #     }
+                    # color: [1,0,0,op.25
+                    color: global.featureColorDefault
+                    width: 2px
+                    order: 1000
